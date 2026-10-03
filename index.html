@@ -308,6 +308,36 @@ td.neg { color: var(--red); }
 .portfolio-metrics .stat-card .value {
   font-size: 1.25rem;
 }
+.update-banner {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  background: var(--accent);
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  display: none;
+  align-items: center;
+  gap: 12px;
+  max-width: calc(100% - 32px);
+}
+.update-banner.show { display: flex; }
+.update-banner button {
+  background: #fff;
+  color: var(--accent);
+  border: none;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  font-family: inherit;
+}
 @media (max-width: 600px) {
   .hero img { height: 120px; }
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
@@ -365,7 +395,7 @@ td.neg { color: var(--red); }
       </div>
     </div>
     <div class="portfolio-actions">
-      <button class="btn btn-primary" id="savePortfolioBtn">Save & update</button>
+      <button class="btn btn-primary" id="savePortfolioBtn">Save &amp; update</button>
       <button class="btn" id="clearPortfolioBtn">Reset tracker</button>
     </div>
     <div class="portfolio-metrics" id="portfolioMetrics"></div>
@@ -378,6 +408,11 @@ td.neg { color: var(--red); }
   <div class="footer">
     Data never leaves your browser · localStorage only
   </div>
+</div>
+
+<div class="update-banner" id="updateBanner">
+  Update available
+  <button type="button" id="updateBtn">Refresh</button>
 </div>
 
 <script>
@@ -730,7 +765,39 @@ document.getElementById('clearPortfolioBtn').addEventListener('click', () => {
 });
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js').catch(console.error);
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (refreshing) return;
+    refreshing = true;
+    window.location.reload();
+  });
+
+  navigator.serviceWorker.register('./sw.js').then((reg) => {
+    const check = () => reg.update().catch(() => {});
+    check();
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') check();
+    });
+    setInterval(check, 60 * 60 * 1000);
+
+    reg.addEventListener('updatefound', () => {
+      const worker = reg.installing;
+      if (!worker) return;
+      worker.addEventListener('statechange', () => {
+        if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+          const banner = document.getElementById('updateBanner');
+          const btn = document.getElementById('updateBtn');
+          if (banner) banner.classList.add('show');
+          if (btn) {
+            btn.onclick = () => {
+              if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+              window.location.reload();
+            };
+          }
+        }
+      });
+    });
+  }).catch(console.error);
 }
 
 render();
