@@ -300,21 +300,41 @@ td.neg { color: var(--red); }
 const LS_KEY = 'trade-journal-v1';
 
 function parseCSV(text) {
-  const lines = text.trim().split(/\r?\n/);
-  if (lines.length < 2) return [];
-  // Skip possible title/header lines before the real column header
-  let headerIdx = 0;
-  for (let i = 0; i < Math.min(lines.length, 10); i++) {
-    if (/run date|trade date/i.test(lines[i]) && /action/i.test(lines[i]) && /symbol/i.test(lines[i])) {
+  // Strip BOM and normalize newlines
+  text = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const rawLines = text.split('\n');
+
+  // Find the real header row (contains Run Date + Action + Symbol)
+  let headerIdx = -1;
+  for (let i = 0; i < Math.min(rawLines.length, 20); i++) {
+    const l = rawLines[i];
+    if (/run\s*date/i.test(l) && /action/i.test(l) && /symbol/i.test(l)) {
       headerIdx = i;
       break;
     }
   }
-  const headers = lines[headerIdx].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+  if (headerIdx < 0) return [];
+
+  const headers = [];
+  {
+    const line = rawLines[headerIdx];
+    let cur = '', inQ = false;
+    for (const ch of line) {
+      if (ch === '"') { inQ = !inQ; continue; }
+      if (ch === ',' && !inQ) { headers.push(cur.trim()); cur = ''; continue; }
+      cur += ch;
+    }
+    headers.push(cur.trim());
+  }
+
   const rows = [];
-  for (let i = headerIdx + 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line || /^disclaimer|^the data/i.test(line)) continue;
+  for (let i = headerIdx + 1; i < rawLines.length; i++) {
+    const line = rawLines[i].trim();
+    if (!line) continue;
+    // Stop at Fidelity disclaimer / footer
+    if (/^the data and information|^disclaimer|^brokerage services|^date downloaded|^"the data/i.test(line)) break;
+    if (/informational purposes only/i.test(line)) break;
+
     const vals = [];
     let cur = '', inQ = false;
     for (const ch of line) {
@@ -323,8 +343,12 @@ function parseCSV(text) {
       cur += ch;
     }
     vals.push(cur.trim());
+
+    // Skip mostly-empty rows
+    if (vals.filter(v => v).length < 3) continue;
+
     const obj = {};
-    headers.forEach((h, idx) => obj[h] = vals[idx] || '');
+    headers.forEach((h, idx) => { obj[h] = vals[idx] || ''; });
     rows.push(obj);
   }
   return rows;
@@ -557,7 +581,7 @@ function processFiles(fileList) {
   const files = Array.from(fileList).filter(f => f && (/\.csv$/i.test(f.name) || f.type === 'text/csv'));
   if (!files.length) return;
 
-  let existing = loadExisting();
+  const allTrades = [];
   let remaining = files.length;
 
   files.forEach(file => {
@@ -565,10 +589,15 @@ function processFiles(fileList) {
     reader.onload = () => {
       const rows = parseCSV(reader.result);
       const trades = rows.map(normalizeTrade).filter(t => t && t.symbol);
-      const newClosed = pairTrades(trades);
-      existing = existing.concat(newClosed);
+      allTrades.push(...trades);
       remaining--;
       if (remaining === 0) {
+        // Pair across the FULL combined history (not per-file)
+        const newClosed = pairTrades(allTrades);
+        let existing = loadExisting();
+        existing = existing.concat(newClosed);
+
+        // Dedupe
         const seen = new Set();
         const merged = [];
         for (const t of existing) {
