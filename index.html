@@ -251,6 +251,63 @@ td.neg { color: var(--red); }
   padding-top: 16px;
   border-top: 1px solid var(--border);
 }
+.portfolio-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 28px;
+}
+.portfolio-panel h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+.portfolio-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+@media (max-width: 600px) {
+  .portfolio-form { grid-template-columns: 1fr; }
+}
+.portfolio-form label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+.portfolio-form input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.95rem;
+  font-family: inherit;
+}
+.portfolio-form input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.portfolio-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.portfolio-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+}
+.portfolio-metrics .stat-card .value {
+  font-size: 1.25rem;
+}
 @media (max-width: 600px) {
   .hero img { height: 120px; }
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
@@ -287,6 +344,33 @@ td.neg { color: var(--red); }
     <p>or click Upload CSV above · you can select multiple files · Accounts History export works best</p>
   </div>
 
+  <div class="portfolio-panel" id="portfolioPanel">
+    <h3>Portfolio yield tracker</h3>
+    <div class="portfolio-form">
+      <div>
+        <label for="startValue">Starting total value ($)</label>
+        <input type="number" id="startValue" step="0.01" min="0" placeholder="e.g. 50000">
+      </div>
+      <div>
+        <label for="startDate">Start date</label>
+        <input type="date" id="startDate">
+      </div>
+      <div>
+        <label for="currentValue">Current total value ($)</label>
+        <input type="number" id="currentValue" step="0.01" min="0" placeholder="e.g. 62500">
+      </div>
+      <div>
+        <label for="netContributions">Net deposits (− withdrawals) ($)</label>
+        <input type="number" id="netContributions" step="0.01" placeholder="0 if none">
+      </div>
+    </div>
+    <div class="portfolio-actions">
+      <button class="btn btn-primary" id="savePortfolioBtn">Save & update</button>
+      <button class="btn" id="clearPortfolioBtn">Reset tracker</button>
+    </div>
+    <div class="portfolio-metrics" id="portfolioMetrics"></div>
+  </div>
+
   <div id="content" class="empty-state">
     No trades loaded yet. Upload a CSV to get started.
   </div>
@@ -300,11 +384,8 @@ td.neg { color: var(--red); }
 const LS_KEY = 'trade-journal-v1';
 
 function parseCSV(text) {
-  // Strip BOM and normalize newlines
   text = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const rawLines = text.split('\n');
-
-  // Find the real header row (contains Run Date + Action + Symbol)
   let headerIdx = -1;
   for (let i = 0; i < Math.min(rawLines.length, 20); i++) {
     const l = rawLines[i];
@@ -314,7 +395,6 @@ function parseCSV(text) {
     }
   }
   if (headerIdx < 0) return [];
-
   const headers = [];
   {
     const line = rawLines[headerIdx];
@@ -326,15 +406,12 @@ function parseCSV(text) {
     }
     headers.push(cur.trim());
   }
-
   const rows = [];
   for (let i = headerIdx + 1; i < rawLines.length; i++) {
     const line = rawLines[i].trim();
     if (!line) continue;
-    // Stop at Fidelity disclaimer / footer
     if (/^the data and information|^disclaimer|^brokerage services|^date downloaded|^"the data/i.test(line)) break;
     if (/informational purposes only/i.test(line)) break;
-
     const vals = [];
     let cur = '', inQ = false;
     for (const ch of line) {
@@ -343,10 +420,7 @@ function parseCSV(text) {
       cur += ch;
     }
     vals.push(cur.trim());
-
-    // Skip mostly-empty rows
     if (vals.filter(v => v).length < 3) continue;
-
     const obj = {};
     headers.forEach((h, idx) => { obj[h] = vals[idx] || ''; });
     rows.push(obj);
@@ -368,43 +442,20 @@ function normalizeTrade(row) {
   const action = actionRaw.toLowerCase();
   let symbol = (row['Symbol'] || row['Ticker'] || row['Security'] || '').trim().toUpperCase();
   if (!symbol || symbol === 'SPAXX' || symbol === 'FDRXX' || symbol === 'FCASH') return null;
-
   let qty = parseNum(row['Quantity'] || row['Qty'] || '0');
   let price = parseNum(row['Price ($)'] || row['Price'] || '0');
   let amount = parseNum(row['Amount ($)'] || row['Amount'] || row['Net Amount'] || '0');
   let commission = parseNum(row['Commission ($)'] || row['Commission'] || '0');
   let fees = parseNum(row['Fees ($)'] || row['Fees'] || '0');
-
   const absQty = Math.abs(qty);
-
   let side = 'unknown';
-  if (/you bought|bought|buy to open|buy to close|purchase|reinvest/i.test(action)) {
-    side = 'buy';
-  } else if (/you sold|sold|sell to open|sell to close|sale|short/i.test(action)) {
-    side = 'sell';
-  } else if (qty < 0 && absQty > 0 && price > 0) {
-    side = 'sell';
-  } else if (qty > 0 && price > 0 && amount < 0) {
-    side = 'buy';
-  }
-
+  if (/you bought|bought|buy to open|buy to close|purchase|reinvest/i.test(action)) side = 'buy';
+  else if (/you sold|sold|sell to open|sell to close|sale|short/i.test(action)) side = 'sell';
+  else if (qty < 0 && absQty > 0 && price > 0) side = 'sell';
+  else if (qty > 0 && price > 0 && amount < 0) side = 'buy';
   if (side === 'unknown' || absQty === 0) return null;
-  if (/dividend|interest|fee charged|wire|transfer|contribution|withdrawal|journal/i.test(action) && !/bought|sold/i.test(action)) {
-    return null;
-  }
-
-  return {
-    date,
-    action: actionRaw,
-    symbol,
-    qty: absQty,
-    price,
-    amount,
-    commission,
-    fees,
-    side,
-    raw: row
-  };
+  if (/dividend|interest|fee charged|wire|transfer|contribution|withdrawal|journal/i.test(action) && !/bought|sold/i.test(action)) return null;
+  return { date, action: actionRaw, symbol, qty: absQty, price, amount, commission, fees, side, raw: row };
 }
 
 function parseDate(d) {
@@ -416,28 +467,16 @@ function parseDate(d) {
 function pairTrades(trades) {
   const sorted = [...trades].filter(t => t && t.symbol && t.side !== 'unknown')
     .sort((a, b) => parseDate(a.date) - parseDate(b.date) || a.symbol.localeCompare(b.symbol));
-
   const bySym = {};
   const closed = [];
-
   for (const t of sorted) {
     if (!bySym[t.symbol]) bySym[t.symbol] = [];
     const stack = bySym[t.symbol];
-
     if (t.side === 'buy') {
-      stack.push({
-        price: t.price,
-        remaining: t.qty,
-        commission: t.commission || 0,
-        fees: t.fees || 0,
-        date: t.date
-      });
+      stack.push({ price: t.price, remaining: t.qty, commission: t.commission || 0, fees: t.fees || 0, date: t.date });
     } else if (t.side === 'sell') {
       let qtyLeft = t.qty;
-      let costBasis = 0;
-      let matchedQty = 0;
-      let entryComm = 0;
-
+      let costBasis = 0, matchedQty = 0, entryComm = 0;
       while (qtyLeft > 0 && stack.length) {
         const open = stack[0];
         const take = Math.min(open.remaining, qtyLeft);
@@ -449,22 +488,12 @@ function pairTrades(trades) {
         qtyLeft -= take;
         if (open.remaining <= 1e-8) stack.shift();
       }
-
       if (matchedQty > 0) {
         const proceeds = matchedQty * t.price;
         const exitFees = (t.commission || 0) + (t.fees || 0);
         const feeScale = matchedQty / t.qty;
         const pnl = proceeds - costBasis - entryComm - (exitFees * feeScale);
-
-        closed.push({
-          symbol: t.symbol,
-          date: t.date,
-          qty: matchedQty,
-          entry: costBasis / matchedQty,
-          exit: t.price,
-          pnl,
-          side: 'long'
-        });
+        closed.push({ symbol: t.symbol, date: t.date, qty: matchedQty, entry: costBasis / matchedQty, exit: t.price, pnl, side: 'long' });
       }
     }
   }
@@ -490,19 +519,7 @@ function computeStats(closed) {
     else if (p < 0) { curL++; curW = 0; maxL = Math.max(maxL, curL); }
     else { curW = 0; curL = 0; }
   }
-  return {
-    trades: closed.length,
-    winRate,
-    profitFactor,
-    expectancy,
-    totalPnl,
-    avgWin,
-    avgLoss,
-    maxWinStreak: maxW,
-    maxLossStreak: maxL,
-    wins: wins.length,
-    losses: losses.length
-  };
+  return { trades: closed.length, winRate, profitFactor, expectancy, totalPnl, avgWin, avgLoss, maxWinStreak: maxW, maxLossStreak: maxL, wins: wins.length, losses: losses.length };
 }
 
 function fmt(n, digits = 2) {
@@ -519,12 +536,72 @@ function fmtMoney(n) {
   return sign + '$' + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+const PF_KEY = 'trade-journal-portfolio-v1';
+
+function loadPortfolio() {
+  try {
+    const raw = localStorage.getItem(PF_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch { return null; }
+}
+
+function savePortfolio(data) {
+  localStorage.setItem(PF_KEY, JSON.stringify(data));
+}
+
+function daysBetween(a, b) {
+  const ms = Math.abs(new Date(b) - new Date(a));
+  return ms / (1000 * 60 * 60 * 24);
+}
+
+function renderPortfolio() {
+  const pf = loadPortfolio();
+  const startValEl = document.getElementById('startValue');
+  const startDateEl = document.getElementById('startDate');
+  const currentValEl = document.getElementById('currentValue');
+  const netEl = document.getElementById('netContributions');
+  const metrics = document.getElementById('portfolioMetrics');
+
+  if (pf) {
+    if (pf.startValue != null) startValEl.value = pf.startValue;
+    if (pf.startDate) startDateEl.value = pf.startDate;
+    if (pf.currentValue != null) currentValEl.value = pf.currentValue;
+    if (pf.netContributions != null) netEl.value = pf.netContributions;
+  }
+
+  const start = parseFloat(startValEl.value);
+  const current = parseFloat(currentValEl.value);
+  const net = parseFloat(netEl.value) || 0;
+  const startDate = startDateEl.value;
+  const today = new Date().toISOString().slice(0, 10);
+
+  if (!isFinite(start) || start <= 0 || !isFinite(current) || !startDate) {
+    metrics.innerHTML = '<div style="color:var(--muted);font-size:0.9rem">Enter starting value, start date, and current total account value to see yield.</div>';
+    return;
+  }
+
+  const gain = current - net - start;
+  const simplePct = gain / start;
+  const days = Math.max(daysBetween(startDate, today), 1);
+  const annualized = Math.pow(1 + simplePct, 365 / days) - 1;
+
+  const gainCls = gain >= 0 ? 'pos' : 'neg';
+  metrics.innerHTML = `
+    <div class="stat-card"><div class="label">Gain / Loss</div><div class="value ${gainCls}">${fmtMoney(gain)}</div></div>
+    <div class="stat-card"><div class="label">Total return</div><div class="value ${gainCls}">${fmtPct(simplePct)}</div></div>
+    <div class="stat-card"><div class="label">Annualized</div><div class="value ${gainCls}">${fmtPct(annualized)}</div></div>
+    <div class="stat-card"><div class="label">Days tracked</div><div class="value">${Math.round(days)}</div></div>
+  `;
+}
+
 function render() {
   const raw = localStorage.getItem(LS_KEY);
   const content = document.getElementById('content');
   if (!raw) {
     content.className = 'empty-state';
     content.innerHTML = 'No trades loaded yet. Upload a CSV to get started.';
+    renderPortfolio();
     return;
   }
   let data;
@@ -532,6 +609,7 @@ function render() {
   if (!data || !data.closed) {
     content.className = 'empty-state';
     content.innerHTML = 'Saved data is invalid. Clear and re-upload.';
+    renderPortfolio();
     return;
   }
   const { closed, stats } = data;
@@ -566,6 +644,7 @@ function render() {
   }
   html += `</tbody></table></div></div>`;
   content.innerHTML = html;
+  renderPortfolio();
 }
 
 function loadExisting() {
@@ -580,10 +659,8 @@ function loadExisting() {
 function processFiles(fileList) {
   const files = Array.from(fileList).filter(f => f && (/\.csv$/i.test(f.name) || f.type === 'text/csv'));
   if (!files.length) return;
-
   const allTrades = [];
   let remaining = files.length;
-
   files.forEach(file => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -592,20 +669,14 @@ function processFiles(fileList) {
       allTrades.push(...trades);
       remaining--;
       if (remaining === 0) {
-        // Pair across the FULL combined history (not per-file)
         const newClosed = pairTrades(allTrades);
         let existing = loadExisting();
         existing = existing.concat(newClosed);
-
-        // Dedupe
         const seen = new Set();
         const merged = [];
         for (const t of existing) {
           const key = [t.symbol, t.date, t.qty, Math.round(t.pnl * 100)].join('|');
-          if (!seen.has(key)) {
-            seen.add(key);
-            merged.push(t);
-          }
+          if (!seen.has(key)) { seen.add(key); merged.push(t); }
         }
         const stats = computeStats(merged);
         localStorage.setItem(LS_KEY, JSON.stringify({ closed: merged, stats, uploadedAt: Date.now() }));
@@ -631,6 +702,31 @@ dropZone.addEventListener('click', () => document.getElementById('fileInput').cl
 
 document.getElementById('clearBtn').addEventListener('click', ()=>{
   if(confirm('Clear all saved trade data from this browser?')){ localStorage.removeItem(LS_KEY); render(); }
+});
+
+document.getElementById('savePortfolioBtn').addEventListener('click', () => {
+  const data = {
+    startValue: parseFloat(document.getElementById('startValue').value) || null,
+    startDate: document.getElementById('startDate').value || null,
+    currentValue: parseFloat(document.getElementById('currentValue').value) || null,
+    netContributions: parseFloat(document.getElementById('netContributions').value) || 0,
+    updatedAt: Date.now()
+  };
+  savePortfolio(data);
+  renderPortfolio();
+});
+document.getElementById('clearPortfolioBtn').addEventListener('click', () => {
+  if (confirm('Reset portfolio yield tracker?')) {
+    localStorage.removeItem(PF_KEY);
+    document.getElementById('startValue').value = '';
+    document.getElementById('startDate').value = '';
+    document.getElementById('currentValue').value = '';
+    document.getElementById('netContributions').value = '';
+    renderPortfolio();
+  }
+});
+['startValue','startDate','currentValue','netContributions'].forEach(id => {
+  document.getElementById(id).addEventListener('input', renderPortfolio);
 });
 
 if ('serviceWorker' in navigator) {
