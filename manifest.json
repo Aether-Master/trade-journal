@@ -1,0 +1,15 @@
+{
+  "short_name": "Trade Journal",
+  "name": "Trade Journal",
+  "icons": [
+    { "src": "logo192.png", "type": "image/png", "sizes": "192x192" },
+    { "src": "logo512.png", "type": "image/png", "sizes": "512x512", "purpose": "any" },
+    { "src": "logo512.png", "type": "image/png", "sizes": "512x512", "purpose": "maskable" },
+    { "src": "logo-mono.png", "type": "image/png", "sizes": "512x512", "purpose": "monochrome" }
+  ],
+  "start_url": ".",
+  "id": ".",
+  "display": "standalone",
+  "theme_color": "#04060d",
+  "background_color": "#04060d"
+}
