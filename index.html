@@ -268,7 +268,7 @@ td.neg { color: var(--red); }
       <div style="display:flex;gap:8px">
         <button class="btn" id="clearBtn" title="Clear saved data">Clear</button>
         <label class="btn btn-primary" for="fileInput">Upload CSV</label>
-        <input type="file" id="fileInput" accept=".csv,text/csv">
+        <input type="file" id="fileInput" accept=".csv,text/csv" multiple>
       </div>
     </div>
   </header>
@@ -284,7 +284,7 @@ td.neg { color: var(--red); }
   <div class="upload-zone" id="dropZone">
     <div class="icon">📊</div>
     <h3>Drop your Fidelity CSV here</h3>
-    <p>or click Upload CSV above · Accounts History export works best</p>
+    <p>or click Upload CSV above · you can select multiple files · Accounts History export works best</p>
   </div>
 
   <div id="content" class="empty-state">
@@ -473,22 +473,53 @@ function render() {
   content.innerHTML = html;
 }
 
-function processFile(file) {
-  const reader = new FileReader();
-  reader.onload = () => {
-    const rows = parseCSV(reader.result);
-    const trades = rows.map(normalizeTrade).filter(t => t.symbol);
-    const closed = pairTrades(trades);
-    const stats = computeStats(closed);
-    localStorage.setItem(LS_KEY, JSON.stringify({ closed, stats, uploadedAt: Date.now() }));
-    render();
-  };
-  reader.readAsText(file);
+function loadExisting() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return [];
+    const data = JSON.parse(raw);
+    return Array.isArray(data.closed) ? data.closed : [];
+  } catch { return []; }
+}
+
+function processFiles(fileList) {
+  const files = Array.from(fileList).filter(f => f && (/\.csv$/i.test(f.name) || f.type === 'text/csv'));
+  if (!files.length) return;
+
+  let existing = loadExisting();
+  let remaining = files.length;
+
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const rows = parseCSV(reader.result);
+      const trades = rows.map(normalizeTrade).filter(t => t.symbol);
+      const newClosed = pairTrades(trades);
+      // Append new closed trades to existing ones
+      existing = existing.concat(newClosed);
+      remaining--;
+      if (remaining === 0) {
+        // Simple dedupe key: symbol|date|qty|pnl (rounded)
+        const seen = new Set();
+        const merged = [];
+        for (const t of existing) {
+          const key = [t.symbol, t.date, t.qty, Math.round(t.pnl * 100)].join('|');
+          if (!seen.has(key)) {
+            seen.add(key);
+            merged.push(t);
+          }
+        }
+        const stats = computeStats(merged);
+        localStorage.setItem(LS_KEY, JSON.stringify({ closed: merged, stats, uploadedAt: Date.now() }));
+        render();
+      }
+    };
+    reader.readAsText(file);
+  });
 }
 
 document.getElementById('fileInput').addEventListener('change', e => {
-  const f = e.target.files[0];
-  if (f) processFile(f);
+  if (e.target.files.length) processFiles(e.target.files);
   e.target.value = '';
 });
 
@@ -496,8 +527,7 @@ const dropZone = document.getElementById('dropZone');
 ['dragenter','dragover'].forEach(ev => dropZone.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.add('dragover'); }));
 ['dragleave','drop'].forEach(ev => dropZone.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.remove('dragover'); }));
 dropZone.addEventListener('drop', e => {
-  const f = e.dataTransfer.files[0];
-  if (f) processFile(f);
+  if (e.dataTransfer.files.length) processFiles(e.dataTransfer.files);
 });
 dropZone.addEventListener('click', () => document.getElementById('fileInput').click());
 
