@@ -4,16 +4,508 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Trade Journal</title>
+<meta name="description" content="Upload your Fidelity trade history and get an automatic breakdown of your performance.">
 <meta name="theme-color" content="#04060d">
-<meta name="description" content="Trade Journal - local CSV analysis for Fidelity Accounts History">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="192x192" href="logo192.png">
 <link rel="apple-touch-icon" href="logo192.png">
 <style>
-/* ... (content truncated for this call - will use full in actual) */
+:root {
+  --bg: #04060d;
+  --surface: #0c101c;
+  --border: #1a2236;
+  --text: #e8edf7;
+  --muted: #8b97b0;
+  --accent: #3b82f6;
+  --green: #22c55e;
+  --red: #ef4444;
+  --orange: #f59e0b;
+  --radius: 12px;
+  --font: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+.app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 16px 48px;
+}
+header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(4,6,13,0.85);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 0;
+  margin: 0 -16px 24px;
+  padding-left: 16px;
+  padding-right: 16px;
+}
+.header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.logo-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.logo-row img {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+}
+.logo-row h1 {
+  font-size: 1.15rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.btn:hover { background: #141a2c; border-color: #2a3550; }
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.btn-primary:hover { background: #2563eb; border-color: #2563eb; }
+.btn-danger {
+  background: transparent;
+  border-color: #3f1d1d;
+  color: #f87171;
+}
+.btn-danger:hover { background: #1f0a0a; }
+.hero {
+  position: relative;
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 28px;
+  border: 1px solid var(--border);
+}
+.hero img {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  display: block;
+  filter: brightness(0.55);
+}
+.hero-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 20px;
+  background: linear-gradient(transparent 30%, rgba(4,6,13,0.9));
+}
+.hero-overlay h2 {
+  font-size: 1.4rem;
+  font-weight: 650;
+  margin-bottom: 4px;
+}
+.hero-overlay p {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.upload-zone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 32px 20px;
+  text-align: center;
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  margin-bottom: 28px;
+}
+.upload-zone:hover, .upload-zone.dragover {
+  border-color: var(--accent);
+  background: #0e1424;
+}
+.upload-zone input { display: none; }
+.upload-zone .icon { font-size: 2rem; margin-bottom: 8px; }
+.upload-zone h3 { font-size: 1rem; margin-bottom: 4px; }
+.upload-zone p { color: var(--muted); font-size: 0.85rem; }
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.stat-card .label {
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+.stat-card .value {
+  font-size: 1.4rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.stat-card .value.pos { color: var(--green); }
+.stat-card .value.neg { color: var(--red); }
+.section {
+  margin-bottom: 28px;
+}
+.section h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section h3 .badge {
+  font-size: 0.7rem;
+  background: var(--border);
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--muted);
+  font-weight: 500;
+}
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+th, td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+th {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: #0a0e1a;
+}
+tr:last-child td { border-bottom: none; }
+td.pos { color: var(--green); }
+td.neg { color: var(--red); }
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--muted);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.chip {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.chip strong { color: var(--text); }
+.footer {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+@media (max-width: 600px) {
+  .hero img { height: 120px; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
 </style>
 </head>
 <body>
-<!-- truncated -->
+<div class="app">
+  <header>
+    <div class="header-inner">
+      <div class="logo-row">
+        <img src="logo192.png" alt="Logo" width="36" height="36">
+        <h1>Trade Journal</h1>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn" id="clearBtn" title="Clear saved data">Clear</button>
+        <label class="btn btn-primary" for="fileInput">Upload CSV</label>
+        <input type="file" id="fileInput" accept=".csv,text/csv">
+      </div>
+    </div>
+  </header>
+
+  <div class="hero">
+    <img src="hero-bull.jpg" alt="Bull market">
+    <div class="hero-overlay">
+      <h2>Your edge, quantified</h2>
+      <p>Upload a Fidelity Accounts History CSV — everything stays on your device.</p>
+    </div>
+  </div>
+
+  <div class="upload-zone" id="dropZone">
+    <div class="icon">📊</div>
+    <h3>Drop your Fidelity CSV here</h3>
+    <p>or click Upload CSV above · Accounts History export works best</p>
+  </div>
+
+  <div id="content" class="empty-state">
+    No trades loaded yet. Upload a CSV to get started.
+  </div>
+
+  <div class="footer">
+    Data never leaves your browser · localStorage only
+  </div>
+</div>
+
+<script>
+const LS_KEY = 'trade-journal-v1';
+
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const vals = [];
+    let cur = '', inQ = false;
+    for (const ch of lines[i]) {
+      if (ch === '"') { inQ = !inQ; continue; }
+      if (ch === ',' && !inQ) { vals.push(cur.trim()); cur = ''; continue; }
+      cur += ch;
+    }
+    vals.push(cur.trim());
+    const obj = {};
+    headers.forEach((h, idx) => obj[h] = vals[idx] || '');
+    rows.push(obj);
+  }
+  return rows;
+}
+
+function normalizeTrade(row) {
+  // Fidelity Accounts History columns vary; try common ones
+  const date = row['Date'] || row['Trade Date'] || row['Run Date'] || '';
+  const action = (row['Action'] || row['Type'] || row['Transaction'] || '').toLowerCase();
+  const symbol = row['Symbol'] || row['Ticker'] || row['Security'] || '';
+  let qty = parseFloat((row['Quantity'] || row['Qty'] || '0').replace(/,/g, '')) || 0;
+  let price = parseFloat((row['Price'] || row['Price ($)'] || '0').replace(/[$,]/g, '')) || 0;
+  let amount = parseFloat((row['Amount'] || row['Amount ($)'] || row['Net Amount'] || '0').replace(/[$,()]/g, '').replace(/\(/,'-')) || 0;
+  // Determine side
+  let side = 'unknown';
+  if (/buy|bought|purchase/i.test(action)) side = 'buy';
+  else if (/sell|sold|sale/i.test(action)) side = 'sell';
+  return { date, action, symbol, qty, price, amount, side, raw: row };
+}
+
+function pairTrades(trades) {
+  // Simple FIFO pairing for realized P&L per symbol
+  const bySym = {};
+  const closed = [];
+  for (const t of trades) {
+    if (!t.symbol || t.side === 'unknown') continue;
+    if (!bySym[t.symbol]) bySym[t.symbol] = [];
+    const stack = bySym[t.symbol];
+    if (t.side === 'buy') {
+      stack.push({ ...t, remaining: Math.abs(t.qty) });
+    } else if (t.side === 'sell') {
+      let qtyLeft = Math.abs(t.qty);
+      let cost = 0, matchedQty = 0;
+      while (qtyLeft > 0 && stack.length) {
+        const open = stack[0];
+        const take = Math.min(open.remaining, qtyLeft);
+        cost += take * open.price;
+        matchedQty += take;
+        open.remaining -= take;
+        qtyLeft -= take;
+        if (open.remaining <= 0) stack.shift();
+      }
+      if (matchedQty > 0) {
+        const proceeds = matchedQty * t.price;
+        const pnl = proceeds - cost;
+        closed.push({
+          symbol: t.symbol,
+          date: t.date,
+          qty: matchedQty,
+          entry: cost / matchedQty,
+          exit: t.price,
+          pnl,
+          side: 'long'
+        });
+      }
+    }
+  }
+  return closed;
+}
+
+function computeStats(closed) {
+  if (!closed.length) return null;
+  const pnls = closed.map(c => c.pnl);
+  const wins = pnls.filter(p => p > 0);
+  const losses = pnls.filter(p => p < 0);
+  const totalPnl = pnls.reduce((a,b) => a+b, 0);
+  const grossProfit = wins.reduce((a,b) => a+b, 0);
+  const grossLoss = Math.abs(losses.reduce((a,b) => a+b, 0));
+  const winRate = wins.length / closed.length;
+  const profitFactor = grossLoss === 0 ? (grossProfit > 0 ? Infinity : 0) : grossProfit / grossLoss;
+  const avgWin = wins.length ? grossProfit / wins.length : 0;
+  const avgLoss = losses.length ? grossLoss / losses.length : 0;
+  const expectancy = (winRate * avgWin) - ((1 - winRate) * avgLoss);
+  // streaks
+  let curW = 0, curL = 0, maxW = 0, maxL = 0;
+  for (const p of pnls) {
+    if (p > 0) { curW++; curL = 0; maxW = Math.max(maxW, curW); }
+    else if (p < 0) { curL++; curW = 0; maxL = Math.max(maxL, curL); }
+    else { curW = 0; curL = 0; }
+  }
+  return {
+    trades: closed.length,
+    winRate,
+    profitFactor,
+    expectancy,
+    totalPnl,
+    avgWin,
+    avgLoss,
+    maxWinStreak: maxW,
+    maxLossStreak: maxL,
+    wins: wins.length,
+    losses: losses.length
+  };
+}
+
+function fmt(n, digits = 2) {
+  if (n == null || !isFinite(n)) return '—';
+  return n.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+function fmtPct(n) {
+  if (n == null || !isFinite(n)) return '—';
+  return (n * 100).toFixed(1) + '%';
+}
+function fmtMoney(n) {
+  if (n == null || !isFinite(n)) return '—';
+  const sign = n < 0 ? '-' : '';
+  return sign + '$' + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function render() {
+  const raw = localStorage.getItem(LS_KEY);
+  const content = document.getElementById('content');
+  if (!raw) {
+    content.className = 'empty-state';
+    content.innerHTML = 'No trades loaded yet. Upload a CSV to get started.';
+    return;
+  }
+  let data;
+  try { data = JSON.parse(raw); } catch { data = null; }
+  if (!data || !data.closed) {
+    content.className = 'empty-state';
+    content.innerHTML = 'Saved data is invalid. Clear and re-upload.';
+    return;
+  }
+  const { closed, stats } = data;
+  content.className = '';
+  let html = '';
+  if (stats) {
+    html += `<div class="stats-grid">
+      <div class="stat-card"><div class="label">Win Rate</div><div class="value">${fmtPct(stats.winRate)}</div></div>
+      <div class="stat-card"><div class="label">Profit Factor</div><div class="value">${stats.profitFactor === Infinity ? '∞' : fmt(stats.profitFactor)}</div></div>
+      <div class="stat-card"><div class="label">Expectancy</div><div class="value ${stats.expectancy >= 0 ? 'pos' : 'neg'}">${fmtMoney(stats.expectancy)}</div></div>
+      <div class="stat-card"><div class="label">Net P&L</div><div class="value ${stats.totalPnl >= 0 ? 'pos' : 'neg'}">${fmtMoney(stats.totalPnl)}</div></div>
+      <div class="stat-card"><div class="label">Trades</div><div class="value">${stats.trades}</div></div>
+      <div class="stat-card"><div class="label">Max Win Streak</div><div class="value pos">${stats.maxWinStreak}</div></div>
+      <div class="stat-card"><div class="label">Max Loss Streak</div><div class="value neg">${stats.maxLossStreak}</div></div>
+      <div class="stat-card"><div class="label">Avg Win / Loss</div><div class="value">${fmtMoney(stats.avgWin)} / ${fmtMoney(stats.avgLoss)}</div></div>
+    </div>`;
+  }
+  html += `<div class="section"><h3>Trade Log <span class="badge">${closed.length}</span></h3>
+    <div class="table-wrap"><table><thead><tr>
+      <th>Date</th><th>Symbol</th><th>Qty</th><th>Entry</th><th>Exit</th><th>P&L</th>
+    </tr></thead><tbody>`;
+  for (const c of closed.slice().reverse()) {
+    const cls = c.pnl >= 0 ? 'pos' : 'neg';
+    html += `<tr>
+      <td>${c.date || '—'}</td>
+      <td>${c.symbol}</td>
+      <td>${fmt(c.qty, 0)}</td>
+      <td>${fmtMoney(c.entry)}</td>
+      <td>${fmtMoney(c.exit)}</td>
+      <td class="${cls}">${fmtMoney(c.pnl)}</td>
+    </tr>`;
+  }
+  html += `</tbody></table></div></div>`;
+  content.innerHTML = html;
+}
+
+function processFile(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const rows = parseCSV(reader.result);
+    const trades = rows.map(normalizeTrade).filter(t => t.symbol);
+    const closed = pairTrades(trades);
+    const stats = computeStats(closed);
+    localStorage.setItem(LS_KEY, JSON.stringify({ closed, stats, uploadedAt: Date.now() }));
+    render();
+  };
+  reader.readAsText(file);
+}
+
+document.getElementById('fileInput').addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (f) processFile(f);
+  e.target.value = '';
+});
+
+const dropZone = document.getElementById('dropZone');
+['dragenter','dragover'].forEach(ev => dropZone.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.add('dragover'); }));
+['dragleave','drop'].forEach(ev => dropZone.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.remove('dragover'); }));
+dropZone.addEventListener('drop', e => {
+  const f = e.dataTransfer.files[0];
+  if (f) processFile(f);
+});
+dropZone.addEventListener('click', () => document.getElementById('fileInput').click());
+
+document.getElementById('clearBtn').addEventListener('click', ()=>{
+  if(confirm('Clear all saved trade data from this browser?')){ localStorage.removeItem(LS_KEY); render(); }
+});
+
+render();
+</script>
 </body>
 </html>
