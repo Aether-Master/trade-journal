@@ -505,6 +505,10 @@ document.getElementById('clearBtn').addEventListener('click', ()=>{
   if(confirm('Clear all saved trade data from this browser?')){ localStorage.removeItem(LS_KEY); render(); }
 });
 
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(console.error);
+}
+
 render();
 </script>
 </body>
