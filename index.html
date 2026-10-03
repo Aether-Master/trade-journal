@@ -119,18 +119,26 @@ header {
   inset: 0;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
-  padding: 20px;
-  background: linear-gradient(transparent 30%, rgba(4,6,13,0.9));
+  justify-content: flex-start;
+  align-items: center;
+  padding: 28px 20px 20px;
+  background: linear-gradient(rgba(4,6,13,0.75) 0%, rgba(4,6,13,0.35) 45%, transparent 70%);
+  text-align: center;
 }
 .hero-overlay h2 {
-  font-size: 1.4rem;
-  font-weight: 650;
-  margin-bottom: 4px;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.55);
 }
 .hero-overlay p {
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.95rem;
+  text-shadow: 0 1px 8px rgba(0,0,0,0.5);
+}
+@media (max-width: 600px) {
+  .hero-overlay h2 { font-size: 1.65rem; }
 }
 .upload-zone {
   border: 2px dashed var(--border);
@@ -363,7 +371,7 @@ td.neg { color: var(--red); }
   <div class="hero">
     <img src="hero-bull.jpg" alt="Bull market">
     <div class="hero-overlay">
-      <h2>Your edge, quantified</h2>
+      <h2>Your Edge, Quantified</h2>
       <p>Upload a Fidelity Accounts History CSV — everything stays on your device.</p>
     </div>
   </div>
